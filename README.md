@@ -1,58 +1,110 @@
-minecraft mod server
---------------------
+# Minecraft server
 
-Everything you need to start a minecraft server with mods.
+A vanilla Minecraft server you can run with one command — and control from Claude.
 
+- **Vanilla Minecraft** (latest stable), running in Docker via [`itzg/minecraft-server`](https://github.com/itzg/docker-minecraft-server).
+- An **MCP server** lets Claude run in-game commands over RCON — list players, give items, change time/weather, teleport, place/fill blocks, and more, all in natural language.
 
-server quick-start
-------------------
+## Requirements
 
-1) Install dependencies
-```
-apt install python3-pip docker.io
-pip3 install docker-compose
-```
+- Docker with Compose v2 (`docker compose`).
+- [`uv`](https://docs.astral.sh/uv/) (only for the Claude/MCP integration).
 
-Ensure you can run docker-compose as a normal user, otherwise run as sudo.
+## Server quick start
 
-2) download mods
+1. Configure the RCON password:
 
-Download the zip file from: https://www.curseforge.com/minecraft/modpacks/decorations-modpack-forge/files/4048412
-Place this file into modpacks/decorations.zip
+   ```bash
+   cp .env.example .env
+   # edit .env: set a strong RCON_PASSWORD (letters + digits)
+   ```
 
-```
-wget https://mediafilez.forgecdn.net/files/4048/412/Decorations+Modpack+(Forge)+1.19.2+-+v5.zip
-unzip Decorations+Modpack+(Forge)+1.19.2+-+v5.zip
-cd mods
-wget https://mediafilez.forgecdn.net/files/3871/432/SereneSeasons-1.19-8.0.0.19.jar
-```
+2. Start the server:
 
-3) start service
+   ```bash
+   docker compose up -d minecraft
+   docker compose logs -f minecraft   # watch until you see "Done ... For help, type help"
+   ```
 
-```
-docker-compose up -d minecraft
-```
+The server listens on `25565`. RCON listens on `127.0.0.1:25575` only (used by the MCP server below).
 
-client quick-start
-------------------
+### Pinning a version
 
-Ensure you download the same mod for your client and that the client is running Forge.
+`VERSION: "LATEST"` in `docker-compose.yml` tracks the newest stable release. To lock clients and
+server to a specific version, set e.g. `VERSION: "1.21.4"`.
 
-```
-wget https://maven.minecraftforge.net/net/minecraftforge/forge/1.19.2-43.1.52/forge-1.19.2-43.1.52-installer.jar
-java -jar forge-1.19.2-43.1.52-installer.jar
-# click OK and Install Client
-cd ~/.minecraft/
-wget https://mediafilez.forgecdn.net/files/4048/412/Decorations+Modpack+(Forge)+1.19.2+-+v5.zip
-unzip Decorations+Modpack+(Forge)+1.19.2+-+v5.zip
-cd mods
-wget https://mediafilez.forgecdn.net/files/3871/432/SereneSeasons-1.19-8.0.0.19.jar
+### Console access
+
+```bash
+docker attach minecraft   # detach with Ctrl-p Ctrl-q
 ```
 
-backups
--------
+## Client quick start
+
+In the Minecraft launcher, pick the **same version** as the server (whatever `LATEST` resolved to,
+or your pinned `VERSION`), then **Multiplayer → Add Server** and point it at the server's address
+(`localhost` if it's the same machine).
+
+## Control the server from Claude
+
+This repo ships an MCP server (`mcp/minecraft_mcp.py`) wired up in `.mcp.json`, so Claude Code
+picks it up automatically when you open the project (you'll be prompted to trust it the first time).
+
+**Prerequisites:** the Minecraft server running (above) and [`uv`](https://docs.astral.sh/uv/)
+installed. `uv` runs the MCP server and installs its one dependency on demand — no venv needed.
+The MCP server reads `RCON_PASSWORD` straight from `.env`, so there's nothing else to configure.
+
+In Claude Code, check it's connected:
+
 ```
-docker-compose up backup
+/mcp
 ```
 
-The backup file should be in backups with a timestamp.
+You should see the **minecraft** server listed. Now just ask, e.g.:
+
+- "Who's online right now?"
+- "Give Steve 10 diamonds."
+- "Set the time to day and make the weather clear."
+- "Teleport Alex to Steve."
+- "Build a 10x10 stone platform at y=70 around x=100, z=100."
+- "Run the command `difficulty hard`."
+
+### Tools exposed
+
+| Tool | What it does |
+|------|--------------|
+| `run_command` | Run any server command (the general escape hatch) |
+| `list_players` | List online players |
+| `say` | Broadcast a chat message |
+| `give` | Give a player items |
+| `teleport` | Teleport a player to another player or coordinates |
+| `set_time` | Set world time (day/night/noon/midnight or ticks) |
+| `set_weather` | Set weather (clear/rain/thunder) |
+| `gamemode` | Change a player's game mode |
+| `set_block` | Place a single block at x/y/z |
+| `fill` | Fill a cuboid with a block (walls, floors, clearing) |
+| `clone` | Copy a region to another location |
+| `summon` | Summon an entity at x/y/z |
+
+> Building tools use **absolute** coordinates — RCON runs from the server console, which has no
+> player position, so relative (`~`) coordinates resolve to 0.
+
+No `uv`? Use pip instead and point your MCP client at `python3 mcp/minecraft_mcp.py`:
+
+```bash
+python3 -m venv .venv && . .venv/bin/activate && pip install -r mcp/requirements.txt
+```
+
+## Backups
+
+```bash
+docker compose run --rm backup
+```
+
+Writes a timestamped `data-YYYYmmddHHMMSS.tar.bz2` into `backup/`.
+
+## Security notes
+
+- RCON is bound to `127.0.0.1` only. **Never** map port `25575` publicly.
+- Always set a strong `RCON_PASSWORD` — anyone who can reach RCON has full server control.
+- `.env` is git-ignored; keep your RCON password out of commits.

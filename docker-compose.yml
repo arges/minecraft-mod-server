@@ -1,22 +1,43 @@
-version: '3.8'
+# Vanilla Minecraft server (itzg/minecraft-server), latest stable version.
+# Copy .env.example to .env and set RCON_PASSWORD before starting.
+# RCON is what lets Claude (via the MCP server in ./mcp) control the game.
 
 services:
   minecraft:
-    image: itzg/minecraft-server
+    image: itzg/minecraft-server:latest
+    restart: unless-stopped
+    # Keep stdin/tty open so `docker attach minecraft` gives an interactive console.
+    stdin_open: true
+    tty: true
     environment:
       EULA: "true"
-      TYPE: FORGE
-      VERSION: 1.19.2
       MEMORY: "4G"
 
+      # Vanilla, newest stable release. Pin to a specific version (e.g. "1.21.4")
+      # if you need clients to match exactly.
+      TYPE: "VANILLA"
+      VERSION: "LATEST"
+
+      # --- RCON (how Claude / the MCP server talks to the game) ---------------
+      ENABLE_RCON: "true"
+      RCON_PORT: "25575"
+      # Avoid '$' in the password (Compose interpolates this file); use letters/digits.
+      RCON_PASSWORD: "${RCON_PASSWORD:?set RCON_PASSWORD in .env}"
+
     ports:
-      - 25565:25565
+      - "25565:25565"
+      # RCON is bound to localhost ONLY. Never expose 25575 publicly.
+      - "127.0.0.1:25575:25575"
+
     volumes:
       - data:/data
-      - ./mods:/mods:ro
 
+  # One-shot backup: `docker compose run --rm backup` writes a timestamped
+  # archive of the world data into ./backup/.
   backup:
-    image: alpine    
+    image: alpine
+    profiles: ["tools"]
+    restart: "no"
     tty: false
     environment:
       - TARGET=data

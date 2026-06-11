@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "minecraft": {
+      "command": "uv",
+      "args": ["run", "--quiet", "mcp/minecraft_mcp.py"],
+      "env": {
+        "RCON_HOST": "127.0.0.1",
+        "RCON_PORT": "25575"
+      }
+    }
+  }
+}
